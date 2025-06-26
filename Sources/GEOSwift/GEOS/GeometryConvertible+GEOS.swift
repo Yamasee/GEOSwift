@@ -225,6 +225,14 @@ public extension GeometryConvertible {
         try evaluateBinaryPredicate(GEOSCoveredBy_r, with: geometry)
     }
 
+    // MARK: - Prepared Geometry
+
+    func makePrepared() throws -> PreparedGeometry {
+        let context = try GEOSContext()
+        let geosObject = try geometry.geosObject(with: context)
+        return try PreparedGeometry(context: context, base: geosObject)
+    }
+
     // MARK: - Dimensionally Extended 9 Intersection Model Functions
 
     /// Parameter mask: A DE9-IM mask pattern
@@ -431,6 +439,14 @@ public extension GeometryConvertible {
         try [self].polygonize()
     }
 
+    func lineMerge() throws -> Geometry {
+        try performUnaryTopologyOperation(GEOSLineMerge_r)
+    }
+
+    func lineMergeDirected() throws -> Geometry {
+        try performUnaryTopologyOperation(GEOSLineMergeDirected_r)
+    }
+
     // MARK: - Buffer Functions
 
     func buffer(by width: Double) throws -> Geometry? {
@@ -482,6 +498,34 @@ public extension GeometryConvertible {
         }
     }
 
+    func offsetCurve(
+        width: Double,
+        quadsegs: Int32 = 8,
+        joinStyle: BufferJoinStyle = .bevel,
+        mitreLimit: Double = 5.0
+    ) throws -> Geometry? {
+        let context = try GEOSContext()
+        let geosObject = try geometry.geosObject(with: context)
+
+        guard let resultPointer = GEOSOffsetCurve_r(
+            context.handle,
+            geosObject.pointer,
+            width,
+            quadsegs,
+            Int32(joinStyle.geosValue.rawValue),
+            mitreLimit
+        ) else {
+            throw GEOSError.libraryError(errorMessages: context.errors)
+        }
+        do {
+            return try Geometry(geosObject: GEOSObject(context: context, pointer: resultPointer))
+        } catch GEOSwiftError.tooFewPoints {
+            return nil
+        } catch {
+            throw error
+        }
+    }
+
     // MARK: - Simplify Functions
 
     func simplify(withTolerance tolerance: Double) throws -> Geometry {
@@ -515,11 +559,11 @@ public extension Collection where Element: GeometryConvertible {
     func polygonize() throws -> GeometryCollection {
         let context = try GEOSContext()
         let geosObjects = try map { try $0.geometry.geosObject(with: context) }
-        guard let pointer = GEOSPolygonize_r(
-            context.handle,
-            geosObjects.map { $0.pointer },
-            UInt32(geosObjects.count)) else {
-                throw GEOSError.libraryError(errorMessages: context.errors)
+        let pointer = withExtendedLifetime(geosObjects) { geosObjects in
+            GEOSPolygonize_r(context.handle, geosObjects.map { $0.pointer }, UInt32(geosObjects.count))
+        }
+        guard let pointer else {
+            throw GEOSError.libraryError(errorMessages: context.errors)
         }
         return try GeometryCollection(geosObject: GEOSObject(context: context, pointer: pointer))
     }

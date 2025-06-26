@@ -496,6 +496,18 @@ final class GeometryConvertible_GEOSTests: XCTestCase {
         }
     }
 
+    // MARK: - Prepared Geometry
+
+    func testMakePreparedAllTypes() {
+        for g in geometryConvertibles {
+            do {
+                _ = try g.makePrepared()
+            } catch {
+                XCTFail("Unexpected error for \(g) makePrepared() \(error)")
+            }
+        }
+    }
+
     // MARK: - Dimensionally Extended 9 Intersection Model Functions
 
     func testRelateMaskBetweenPoints() {
@@ -997,6 +1009,34 @@ final class GeometryConvertible_GEOSTests: XCTestCase {
         XCTAssertTrue(try lineStrings.polygonize().isTopologicallyEquivalent(to: expectedPolygon))
     }
 
+    func testLineMerge() {
+        let multiLineString = try! MultiLineString(lineStrings: [
+            LineString(points: [Point(x: 0, y: 0), Point(x: 1, y: 0)]),
+            LineString(points: [Point(x: 1, y: 0), Point(x: 0, y: 1)]),
+            LineString(points: [Point(x: 0, y: 0), Point(x: 2, y: 1)])])
+
+        let expectedLineString = try! LineString(points: [
+            Point(x: 2, y: 1),
+            Point(x: 0, y: 0),
+            Point(x: 1, y: 0),
+            Point(x: 0, y: 1)])
+
+        XCTAssertEqual(try multiLineString.lineMerge(), .lineString(expectedLineString))
+    }
+
+    func testLineMergeDirected() {
+        let multiLineString = try! MultiLineString(lineStrings: [
+            LineString(points: [Point(x: 0, y: 0), Point(x: 1, y: 0)]),
+            LineString(points: [Point(x: 1, y: 0), Point(x: 0, y: 1)]),
+            LineString(points: [Point(x: 0, y: 0), Point(x: 2, y: 1)])])
+
+        let expectedMultiLineString = try! MultiLineString(lineStrings: [
+            LineString(points: [Point(x: 0, y: 0), Point(x: 1, y: 0), Point(x: 0, y: 1)]),
+            LineString(points: [Point(x: 0, y: 0), Point(x: 2, y: 1)])])
+
+        XCTAssertEqual(try multiLineString.lineMergeDirected(), .multiLineString(expectedMultiLineString))
+    }
+
     // MARK: - Buffer Functions
 
     func testBufferAllTypes() {
@@ -1067,6 +1107,38 @@ final class GeometryConvertible_GEOSTests: XCTestCase {
 
     func testBufferWithStyleNegativeBufferWidthWithNilResult() throws {
         try XCTAssertNil(Point.testValue1.bufferWithStyle(width: -1))
+    }
+
+    func testOffsetCurve() throws {
+        let lineString = try LineString(points: [
+            Point(x: 0, y: 0),
+            Point(x: 10, y: 0),
+            Point(x: 10, y: 10)])
+
+        let expextedLineString = try LineString(points: [
+            Point(x: 0, y: 5),
+            Point(x: 5, y: 5),
+            Point(x: 5, y: 10)])
+
+        let actualGeometry = try lineString.offsetCurve(width: 5, joinStyle: .bevel)
+
+        XCTAssertEqual(actualGeometry, .lineString(expextedLineString))
+    }
+
+    func testOffsetCurveWithNegativeWidth() throws {
+        let lineString = try LineString(points: [
+            Point(x: 0, y: 0),
+            Point(x: 10, y: 0),
+            Point(x: 10, y: 10)])
+
+        let expextedLineString = try LineString(points: [
+            Point(x: 0, y: -5),
+            Point(x: 10, y: -5),
+            Point(x: 15, y: 0),
+            Point(x: 15, y: 10)])
+
+        let actualGeometry = try lineString.offsetCurve(width: -5, joinStyle: .bevel)
+        XCTAssertTrue(try actualGeometry?.isTopologicallyEquivalent(to: expextedLineString) == true)
     }
 
     // MARK: - Simplify Functions
